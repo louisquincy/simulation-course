@@ -7,11 +7,9 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QImage, QPainter, QColor
 
-# --- НАСТРОЙКИ (можно крутить тут) ---
-GRID_SIZE = 200       # размер карты, если лагает - ставим 100 или 150
-CELL_SCALE = 6        # масштаб отрисовки (не влияет на логику)
+GRID_SIZE = 200       
+CELL_SCALE = 6       
 
-# состояния клеток (просто цифры для массива)
 S_DIRT  = 0
 S_TREE  = 1
 S_FIRE  = 2
@@ -29,11 +27,6 @@ COLORS = np.array([
 ], dtype=np.uint8)
 
 
-# ==========================================
-# ЛОГИЧЕСКОЕ ЯДРО (КЛЕТОЧНЫЙ АВТОМАТ)
-# ==========================================
-
-# @njit ускоряет питон в 100 раз, компилируя эту функцию
 @njit(fastmath=True)
 def logic(grid, next_grid, height_map, timers, 
                  p_grow, p_ignite, wind_x, wind_y, wind_str):
@@ -105,7 +98,6 @@ def logic(grid, next_grid, height_map, timers,
                     next_grid[r, c] = S_TREE
 
 
-# генерация карты (шум + сглаживание)
 @njit
 def generate_map_numba(size):
     h_map = np.random.rand(size, size)
