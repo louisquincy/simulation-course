@@ -22,31 +22,31 @@ def chi2_critical_discr(degrees_of_freedom):
 
 def compute_discr_stats(samples, values, theor_probs):
     n = len(samples)
-    # Теоретические среднее и дисперсия
+ 
     theor_mean = sum(v * p for v, p in zip(values, theor_probs))
     theor_var = sum(p * (v - theor_mean)**2 for v, p in zip(values, theor_probs))
-    # Эмпирические
+ 
     emp_mean = sum(samples) / n
     emp_var = sum((x - emp_mean)**2 for x in samples) / n
-    # Частоты и эмпирические вероятности
+ 
     freq = [0] * len(values)
     for x in samples:
         idx = values.index(x)
         freq[idx] += 1
     emp_probs = [f / n for f in freq]
-    # χ²
+ 
     chi2 = 0.0
     for i, f_obs in enumerate(freq):
         f_exp = n * theor_probs[i]
         if f_exp > 0:
             chi2 += (f_obs - f_exp)**2 / f_exp
-    # Критическое значение и гипотеза
+ 
     df = len(values) - 1
     chi2_crit = chi2_critical_discr(df)
     hypothesis = "Принимается" if chi2 <= chi2_crit else "Отвергается"
     chi2_comparison = f"{chi2:.2f} {'≤' if chi2 <= chi2_crit else '>'} {chi2_crit}"
     
-    # Относительные погрешности
+ 
     mean_err = abs(emp_mean - theor_mean) / theor_mean * 100 if theor_mean != 0 else 0
     var_err = abs(emp_var - theor_var) / theor_var * 100 if theor_var != 0 else 0
     return {
