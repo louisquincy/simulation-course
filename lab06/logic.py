@@ -22,7 +22,6 @@ def chi2_critical_discr(degrees_of_freedom):
 
 def compute_discr_stats(samples, values, theor_probs):
     n = len(samples)
- 
     theor_mean = sum(v * p for v, p in zip(values, theor_probs))
     theor_var = sum(p * (v - theor_mean)**2 for v, p in zip(values, theor_probs))
  
@@ -46,7 +45,6 @@ def compute_discr_stats(samples, values, theor_probs):
     hypothesis = "Принимается" if chi2 <= chi2_crit else "Отвергается"
     chi2_comparison = f"{chi2:.2f} {'≤' if chi2 <= chi2_crit else '>'} {chi2_crit}"
     
- 
     mean_err = abs(emp_mean - theor_mean) / theor_mean * 100 if theor_mean != 0 else 0
     var_err = abs(emp_var - theor_var) / theor_var * 100 if theor_var != 0 else 0
     return {
@@ -65,18 +63,22 @@ def compute_discr_stats(samples, values, theor_probs):
         "emp_probs": emp_probs
     }
 
-def generate_norm_samples(rng: MultiKongGen, n: int):
+def generate_norm_samples(rng: MultiKongGen, n: int, mean: float = 0.0, variance: float = 1.0):
     samples = []
+    std_dev = math.sqrt(variance)
     for _ in range(n):
         u_sum = sum(rng.anabios() for _ in range(12))
-        samples.append(u_sum - 6.0)
+        z = u_sum - 6.0
+        # Преобразование N(0, 1) в N(μ, σ²)
+        x = mean + std_dev * z
+        samples.append(x)
     return samples
 
 NORM_BINS = [
     (-float('inf'), -2.0), (-2.0, -1.0), (-1.0, 0.0),
     (0.0, 1.0), (1.0, 2.0), (2.0, float('inf'))
 ]
-NORM_BIN_LABELS = ["(-∞, -2)", "[-2, -1)", "[-1, 0)", "[0, 1)", "[1, 2)", "[2, +∞)"]
+NORM_BIN_LABELS = ["(-inf, -2)", "[-2, -1)", "[-1, 0)", "[0, 1)", "[1, 2)", "[2, +inf)"]
 
 def norm_cdf(x):
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
@@ -84,24 +86,32 @@ def norm_cdf(x):
 NORM_THEO_PROBS = [norm_cdf(hi) - norm_cdf(lo) for lo, hi in NORM_BINS]
 NORM_CHI2_CRIT = 11.07
 
-def compute_norm_stats(samples):
+def compute_norm_stats(samples, mean: float = 0.0, variance: float = 1.0):
     n = len(samples)
     emp_mean = sum(samples) / n
     emp_var = sum((x - emp_mean)**2 for x in samples) / n
+    
     freq = [0] * len(NORM_BINS)
+    std_dev = math.sqrt(variance)
+    
     for x in samples:
+        # Для проверки гипотезы стандартизируем сгенерированные значения обратно
+        z = (x - mean) / std_dev if std_dev > 0 else 0
         for i, (lo, hi) in enumerate(NORM_BINS):
-            if (lo == -float('inf') or x >= lo) and (hi == float('inf') or x < hi):
+            if (lo == -float('inf') or z >= lo) and (hi == float('inf') or z < hi):
                 freq[i] += 1
                 break
+                
     chi2 = 0.0
     for i, f_obs in enumerate(freq):
         f_exp = n * NORM_THEO_PROBS[i]
         if f_exp > 0:
             chi2 += (f_obs - f_exp)**2 / f_exp
-    mean_abs_err = abs(emp_mean - 0.0)
-    mean_rel_err = mean_abs_err * 100 if abs(0.0) > 1e-9 else 0
-    var_rel_err = abs(emp_var - 1.0) / 1.0 * 100
+            
+    mean_abs_err = abs(emp_mean - mean)
+    mean_rel_err = mean_abs_err * 100 if abs(mean) > 1e-9 else 0
+    var_rel_err = abs(emp_var - variance) / variance * 100 if variance != 0 else 0
+    
     return {
         "n": n, "emp_mean": emp_mean, "emp_var": emp_var,
         "mean_abs_err": mean_abs_err, "mean_rel_err": mean_rel_err,

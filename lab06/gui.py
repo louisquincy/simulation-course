@@ -130,7 +130,7 @@ class DiscrTab(QWidget):
         raw = []
         for le in self.prob_inputs:
             try:
-                v = float(le.text())
+                v = float(le.text().replace(',', '.'))
                 if v < 0:
                     raise ValueError
                 raw.append(v)
@@ -178,6 +178,7 @@ class DiscrTab(QWidget):
             self.emp_prob_labels[i].setText(f"P(X={val}): --")
         self.log("[ДСВ] Таблица результатов очищена")
 
+
 class NormTab(QWidget):
     def __init__(self, rng, log_callback):
         super().__init__()
@@ -187,6 +188,22 @@ class NormTab(QWidget):
 
     def setup_ui(self):
         layout = QVBoxLayout()
+        
+        # Поля для задания мат. ожидания и дисперсии
+        params_group = QGroupBox("Параметры распределения N(μ, σ²)")
+        params_layout = QHBoxLayout()
+        
+        self.mean_input = QLineEdit("0.0")
+        self.var_input = QLineEdit("1.0")
+        
+        params_layout.addWidget(QLabel("Мат. ожидание (μ):"))
+        params_layout.addWidget(self.mean_input)
+        params_layout.addWidget(QLabel("Дисперсия (σ² > 0):"))
+        params_layout.addWidget(self.var_input)
+        
+        params_group.setLayout(params_layout)
+        layout.addWidget(params_group)
+
         ctrl_group = QGroupBox("Выбор объёма выборки")
         ctrl_layout = QHBoxLayout()
         self.btn_n10 = AnimatedButton("N = 10")
@@ -234,10 +251,24 @@ class NormTab(QWidget):
         QTimer.singleShot(10, lambda: self._do_run(n))
 
     def _do_run(self, n):
-        samples = generate_norm_samples(self.rng, n)
-        stats = compute_norm_stats(samples)
+        # Парсинг параметров
+        try:
+            mean = float(self.mean_input.text().replace(',', '.'))
+            variance = float(self.var_input.text().replace(',', '.'))
+            if variance <= 0:
+                raise ValueError
+        except ValueError:
+            self.log("Ошибка: Некорректные μ или σ². Используются значения по умолчанию (μ=0, σ²=1).")
+            mean, variance = 0.0, 1.0
+            self.mean_input.setText("0.0")
+            self.var_input.setText("1.0")
+
+        samples = generate_norm_samples(self.rng, n, mean, variance)
+        stats = compute_norm_stats(samples, mean, variance)
+        
         chi2_text = f"{stats['chi2']:.2f} {'<' if stats['chi2'] <= stats['chi2_crit'] else '>'} {stats['chi2_crit']}"
         hypo = "принимается" if stats['chi2'] <= stats['chi2_crit'] else "отвергается"
+        
         row = self.table.rowCount()
         self.table.insertRow(row)
         self.table.setItem(row, 0, QTableWidgetItem(str(stats["n"])))
@@ -250,13 +281,17 @@ class NormTab(QWidget):
         if MATPLOTLIB:
             self.figure.clear()
             ax = self.figure.add_subplot(111)
-            bin_centers = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]
-            widths = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-            emp_density = [stats['freq'][i] / (stats['n'] * widths[i]) for i in range(len(widths))]
-            ax.bar(bin_centers, emp_density, width=0.9, alpha=0.7, label='Эмпирическая плотность')
-            x = [i/20 for i in range(-80, 81)]
-            y = [1.0/((2*3.14159)**0.5) * 2.71828**(-0.5*xi*xi) for xi in x]
-            ax.plot(x, y, 'r-', label='N(0,1)')
+            
+            # Динамическая гистограмма, подстраивается под сгенерированные данные
+            ax.hist(samples, bins=15, density=True, alpha=0.7, label='Эмпирическая плотность', color='#89b4fa')
+            
+            # Построение теоретической кривой
+            std_dev = variance ** 0.5
+            x_min, x_max = mean - 4 * std_dev, mean + 4 * std_dev
+            x = [x_min + i*(x_max - x_min)/100 for i in range(101)]
+            y = [1.0/(std_dev * (2*3.14159)**0.5) * 2.71828**(-0.5 * ((xi - mean)/std_dev)**2) for xi in x]
+            
+            ax.plot(x, y, 'r-', label=f'N({mean}, {variance})')
             ax.set_title(f"Гистограмма для n={stats['n']}")
             ax.set_xlabel("Значение")
             ax.set_ylabel("Плотность")
@@ -264,7 +299,7 @@ class NormTab(QWidget):
             self.canvas.draw()
 
         self.progress.setVisible(False)
-        self.log(f"[Нормальная] N={n}: среднее={stats['emp_mean']:.4f} (абс.погр.{stats['mean_abs_err']:.4f}), χ²={stats['chi2']:.2f} → гипотеза {hypo}")
+        self.log(f"[Нормальная N({mean}, {variance})] N={n}: среднее={stats['emp_mean']:.4f} (абс.погр.{stats['mean_abs_err']:.4f}), χ²={stats['chi2']:.2f} → гипотеза {hypo}")
 
     def clear(self):
         self.table.setRowCount(0)
@@ -273,10 +308,11 @@ class NormTab(QWidget):
             self.canvas.draw()
         self.log("[Нормальная] Таблица и гистограмма очищены")
 
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Лабораторная работа №6: Моделирование ДСВ (настраиваемые вероятности) и нормальной СВ")
+        self.setWindowTitle("Лабораторная работа №6: Моделирование ДСВ и Нормальной СВ (с настраиваемыми параметрами)")
         self.setMinimumSize(1100, 800)
         self.rng = MultiKongGen()
 
@@ -304,12 +340,12 @@ class MainWindow(QMainWindow):
         self.log_text.setReadOnly(True)
         self.log_text.setMaximumHeight(150)
 
-        # Теперь создаём вкладки (они будут вызывать log_message)
+        # Теперь создаём вкладки
         self.tabs = QTabWidget()
         self.discr_tab = DiscrTab(self.rng, self.log_message)
         self.norm_tab = NormTab(self.rng, self.log_message)
         self.tabs.addTab(self.discr_tab, "Дискретная СВ (настраиваемая)")
-        self.tabs.addTab(self.norm_tab, "Нормальная СВ (N(0,1))")
+        self.tabs.addTab(self.norm_tab, "Нормальная СВ (N(μ, σ²))")
 
         layout.addWidget(self.tabs)
         layout.addWidget(QLabel("Выводы и отладочная информация:"))
